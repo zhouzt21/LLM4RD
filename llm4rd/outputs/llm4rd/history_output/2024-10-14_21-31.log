@@ -1,0 +1,122 @@
+[2024-10-14 21:26:42,998][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+```python
+@torch.jit.script
+def compute_reward(self_root_state, self_body_pos, oppo_root_state, oppo_body_pos, oppo_dof_pos, oppo_dof_vel,
+                 hand_ids, target_ids):
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]
+
+    def compute_knockout_reward():
+        return -1.0
+
+    def compute_hit_reward():
+        temperature = 5.0
+        reward = -abs(self_body_pos[:, hand_ids, :].unsqueeze(-2) - oppo_body_pos[:, target_ids, :].unsqueeze(-3).repeat((1, self_hand_pos.shape[1], 1, 1))).sum(dim=-1)
+        return torch.exp(reward / temperature)
+
+    def compute_distance_reward():
+        temperature = 10.0
+        distance = (oppo_root_state[:, 0:3] - self_body_pos[:, :]).norm(dim=2)
+        reward = -distance
+        return torch.exp(reward / temperature)
+
+    def compute_duration_reward():
+        duration = 50.0 - oppo_root_state[:, 10]
+        return duration
+
+    knockout_reward = compute_knockout_reward()
+    hit_reward, _ = compute_hit_reward()
+    distance_reward, _ = compute_distance_reward()
+    duration_reward = compute_duration_reward()
+
+    reward = 0.5 * (hit_reward + distance_reward) - duration_reward
+    if knockout_reward > 0:
+        reward = torch.tensor([knockout_reward], device=self_root_state.device)
+    
+    return reward, {'knockout': knockout_reward, 'hit': hit_reward, 'distance': distance_reward, 'duration': duration_reward}
+```|im_end|
+
+[{'model': 'llama3-en', 'created_at': '2024-10-14T13:26:42.998171888Z', 'message': {'role': 'assistant', 'content': "```python\n@torch.jit.script\ndef compute_reward(self_root_state, self_body_pos, oppo_root_state, oppo_body_pos, oppo_dof_pos, oppo_dof_vel,\n                 hand_ids, target_ids):\n    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]\n\n    def compute_knockout_reward():\n        return -1.0\n\n    def compute_hit_reward():\n        temperature = 5.0\n        reward = -abs(self_body_pos[:, hand_ids, :].unsqueeze(-2) - oppo_body_pos[:, target_ids, :].unsqueeze(-3).repeat((1, self_hand_pos.shape[1], 1, 1))).sum(dim=-1)\n        return torch.exp(reward / temperature)\n\n    def compute_distance_reward():\n        temperature = 10.0\n        distance = (oppo_root_state[:, 0:3] - self_body_pos[:, :]).norm(dim=2)\n        reward = -distance\n        return torch.exp(reward / temperature)\n\n    def compute_duration_reward():\n        duration = 50.0 - oppo_root_state[:, 10]\n        return duration\n\n    knockout_reward = compute_knockout_reward()\n    hit_reward, _ = compute_hit_reward()\n    distance_reward, _ = compute_distance_reward()\n    duration_reward = compute_duration_reward()\n\n    reward = 0.5 * (hit_reward + distance_reward) - duration_reward\n    if knockout_reward > 0:\n        reward = torch.tensor([knockout_reward], device=self_root_state.device)\n    \n    return reward, {'knockout': knockout_reward, 'hit': hit_reward, 'distance': distance_reward, 'duration': duration_reward}\n```|im_end|\n"}, 'done_reason': 'stop', 'done': True, 'total_duration': 72404786525, 'load_duration': 4005456603, 'prompt_eval_count': 1408, 'prompt_eval_duration': 10127010000, 'eval_count': 380, 'eval_duration': 58177495000}]
+[2024-10-14 21:26:42,999][root][INFO] - Iteration 0: Processing Code Run 0
+[2024-10-14 21:26:42,999][root][INFO] - Iteration 0: Code Run 0 cannot parse function signature!
+[2024-10-14 21:29:26,224][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+```python
+@torch.jit.script
+def compute_reward(self, round: int, score: torch.Tensor, fight_style: torch.Tensor, aggression: torch.Tensor, technique_diversity: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    if self.current_round == 0:
+        return torch.tensor(0.0), {'Round Start': torch.tensor(0.0)}
+    
+    reward = 0.0
+    reward_components = {}
+    
+    # round completion
+    reward += -1 * (5 - round) / 10
+    
+    # scoring system
+    if score > self.previous_score:
+        reward += (score - self.previous_score) * 2
+        reward_components['Scoring'] = (score - self.previous_score).unsqueeze(0)
+    
+    # fight style and aggression
+    if fight_style < self.opponent_fight_style:
+        reward -= 1.5 * (self.opponent_fight_style - fight_style)
+        reward_components['Fight Style'] = torch.tensor(-1.5) * (self.opponent_fight_style - fight_style).unsqueeze(0)
+    
+    # technique diversity
+    if technique_diversity > self.opponent_technique_diversity:
+        reward += 0.7 * (technique_diversity - self.opponent_technique_diversity)
+        reward_components['Technique Diversity'] = torch.tensor(0.7) * (technique_diversity - self.opponent_technique_diversity).unsqueeze(0)
+    
+    # unbalancing opponent
+    if self.unbalanced:
+        reward += 1.2 * (self.round / 5)
+        reward_components['Unbalance'] = torch.tensor(1.2) * (self.round / 5).unsqueeze(0)
+    
+    # knockout and takedown
+    if self.knockout or self.takedown:
+        if round < 4:
+            reward += -3
+        else:
+            reward += 10
+        reward_components['Knockout/Takedown'] = torch.tensor(10).unsqueeze(0) if self.knockout or self.takedown and round == 5 else torch.tensor(-3).unsqueeze(0)
+    
+    # defense and counterattacks
+    if self.defense and self.counterattack:
+        reward += 1.4 * (self.round / 5)
+        reward_components['Defense/Counter'] = torch.tensor(1.4) * (self.round / 5).unsqueeze(0)
+    
+    # impression points
+    if self.impression > self.opponent_impression:
+        reward += 2
+        reward_components['Impression Points'] = torch.tensor(2).unsqueeze(0)
+    
+    # penalties and warnings
+    if self.penalty:
+        reward -= 3.5
+        reward_components['Penalties'] = torch.tensor(-3.5).unsqueeze(0)
+    
+    self.previous_score = score
+    
+    return torch.tensor(reward), reward_components
+```
+This function is designed to learn an agent's strategy in Muay Thai by rewarding it for completing rounds, scoring more points than the opponent, using effective fight styles and techniques, unbalancing the opponent, performing knockouts or takedowns, defending against attacks while counterattacking, impressing judges with fighting spirit, and avoiding penalties. The function also punishes the agent when they lose a round, are outscored by their opponent, or commit fouls.
+
+The design follows these steps:
+1. Begin by deducting 0.1 points for each remaining round to encourage finishing fights quickly.
+2. Reward scoring more than the opponent by doubling the difference in score.
+3. Deduct from the agent's reward if they have a worse fight style and aggression compared to their opponent.
+4. Award points if the agent uses a wider variety of techniques compared to their opponent.
+5. Give bonus rewards for unbalancing the opponent, with increasing weight as the round progresses.
+6. Offer high rewards for knockouts or takedowns in the last round, but penalize them before that to discourage recklessness.
+7. Reward defense and counterattacks, especially late in the fight when points become more valuable.
+8. Award extra points if the agent impresses judges with their fighting style.
+9. Finally, heavily punish the agent for committing fouls or receiving penalties.
+
+This function is designed to promote an efficient strategy that prioritizes scoring early, using effective techniques and fight styles, and avoiding unnecessary risks. It also rewards the agent for defending against attacks while counterattacking and impressing judges with their performance. By balancing these factors, this reward function encourages agents to learn strategies that succeed in competitive Muay Thai matches.
+
+Please note that this is a conceptual design and may need further adjustments based on actual game dynamics and simulation results.
+
+Error executing job with overrides: []
+Traceback (most recent call last):
+  File "llm4rd.py", line 206, in main
+    response_res = response_cur_2[0]["message"]["content"]
+KeyError: 0

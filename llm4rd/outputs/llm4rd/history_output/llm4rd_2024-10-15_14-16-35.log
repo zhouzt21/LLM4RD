@@ -1,0 +1,70 @@
+[2024-10-15 14:16:35,437][root][INFO] - total iter: 1, total sample: 3, current iter: 0
+[2024-10-15 14:17:24,177][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-15 14:17:24,178][root][INFO] - 0, and the content is:```python
+@torch.jit.script
+def compute_reward(self_contact_norm: torch.Tensor, oppo_contact_norm: torch.Tensor,
+                 self_dof_pos: torch.Tensor, target_ids: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    contact_norm = torch.cat([self_contact_norm, oppo_contact_norm], dim=-1)
+    
+    # 0.1 points for every unit of force
+    force_reward = 0.1 * (contact_norm - 1).abs()
+    
+    # -5 points if the boxer is knocked out
+    knockout_reward = torch.where(oppo_contact_norm > 10, -5., torch.zeros_like(oppo_contact_norm))
+    
+    # 5 points per second for hitting target
+    target_hitting_reward = torch.mean(torch.where(self_dof_pos[:, target_ids] > 0.2, 1., torch.zeros_like(target_ids)), dim=-1) / self.env.timestep
+    
+    reward = force_reward + knockout_reward + target_hitting_reward
+    return reward, {'force': force_reward, 'knockout': knockout_reward, 'target_hitting': target_hitting_reward}
+```|im_end|>
+[2024-10-15 14:17:24,178][root][INFO] - Iteration 0: Processing Code Run 0
+[2024-10-15 14:19:54,930][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-15 14:19:54,930][root][INFO] - The reward function should be designed to maximize points by delivering effective blows within the set time. To this end, I propose the following adapted version of the in-context learned reward function:
+
+```python
+import torch
+
+def muaythai_reward(self_contact_force: torch.Tensor,
+                  oppo_contact_force: torch.Tensor,
+                  self_dof_pos: torch.Tensor,
+                  target_ids: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    # 0.2 points per unit of force
+    force_reward = 0.2 * (self_contact_force - 1).abs() + 0.2 * (oppo_contact_force - 1).abs()
+    
+    # -5 points if the boxer is knocked out
+    knockout_reward = torch.where(oppo_contact_force > 10, -5., torch.zeros_like(oppo_contact_force))
+    
+    # 5 points per second for hitting target
+    target_hitting_reward = torch.mean(torch.where(self_dof_pos[:, target_ids] > 0.2, 1., torch.zeros_like(target_ids)), dim=-1) / self.env.timestep
+    
+    # 0.1 point per unbalancing the opponent (use kicks or takedowns to unbalance)
+    unbalance_reward = torch.where((self_dof_pos[:, 5:] > 0.2) | (torch.sum(self_dof_pos[:, :5] > 0.2, dim=-1) > 0), 0.1, torch.zeros_like(self_dof_pos))
+    
+    # 0.05 point per defense and counterattack
+    defense_reward = torch.where((self_dof_pos[1:, :] - self_dof_pos[:-1, :]) < -0.5, 0.05, torch.zeros_like(self_dof_pos[1:]))
+    
+    # 0.2 points for every round completed (up to 10)
+    round_reward = (torch.arange(1, 6) * 0.2).clamp_max(10) * (self.round < 5)
+    
+    reward = force_reward + knockout_reward + target_hitting_reward + unbalance_reward + defense_reward + round_reward
+    
+    return reward, {'force': force_reward,
+                   'knockout': knockout_reward,
+                   'target_hitting': target_hitting_reward,
+                   'unbalance': unbalance_reward,
+                   'defense': defense_reward,
+                   'round': round_reward}
+```
+
+The above code adapts the original function based on the Muay Thai rules and scoring principles. The reward is calculated by summing multiple components:
+
+1. **force_reward**: This component rewards the boxer for every unit of force used in strikes, with a multiplier to encourage more powerful strikes.
+2. **knockout_reward**: If the opponent is knocked out or near knockout (contact_force > 10), it deducts 5 points as per the rules.
+3. **target_hitting_reward**: This component rewards the boxer for hitting the target areas (head, torso, limbs) at a rate of 5 points per second.
+4. **unbalance_reward**: Kicks and takedowns are considered effective strikes that unbalance the opponent; this component rewards the boxer with 0.1 points per such strike.
+5. **defense_reward**: Defense and counterattacks are also rewarded at a rate of 0.05 points for every successful defense.
+6. **round_reward**: Completing each round up to the fifth earns a bonus of up to 10 points.
+
+The reward function encourages boxers to use powerful strikes, defend effectively, unbalance their opponents, hit target areas, and complete rounds efficiently while avoiding knockouts. This design should motivate strategies that promote long-term learning in competitive environments.
+

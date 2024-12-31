@@ -1,0 +1,9 @@
+The Python environment is {task_obs_code_string}. Write a reward function for the following task: {task_description}.
+Referring to the previous reward function design results for this general category of sports:{output_context_string} and
+use the method of in-context learning to design an adapted reward function for a new variant of the sport.
+The introduction of the new variant of the sport is {input_rules}. The output should meet the requirement and the function name id "compute_reward".
+
+Some helpful tips for writing the reward function code:
+    (1) You can explore common sense as much as possible and analyze the given competition rules to identify the key factors for winning and the inherent characteristics of the sport, 
+so that the reward function can motivate efficient sports combat strategies and promote the agent's long-term learning in a competitive environment. 
+    (2) Ensure that the function design can balance the aforementioned factors, and each factor can explain how it affects the strategy learning process.

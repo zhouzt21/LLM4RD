@@ -1,0 +1,92 @@
+[2024-10-14 21:39:46,720][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-14 21:39:46,720][root][INFO] - Iteration 0: Processing Code Run 0
+[2024-10-14 21:41:19,999][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-14 21:41:19,999][root][INFO] - Iteration 0: Code Run final cannot parse function signature!
+[2024-10-14 21:39:46,720][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+```python
+@torch.jit.script
+def compute_reward(self_root_state, self_body_pos, oppo_root_state, oppo_body_pos, oppo_body_rot,
+                  oppo_dof_pos, oppo_dof_vel, self_contact_norm, oppo_contact_norm,
+                  hand_ids, target_ids) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
+    
+    # root info
+    self_root_pos = self_root_state[:, 0:3]
+    self_root_rot = self_root_state[:, 3:7]
+    oppo_root_pos = oppo_root_state[:, 0:3]
+    oppo_root_rot = oppo_root_state[:, 3:7]
+    oppo_root_vel = oppo_root_state[:, 7:10]
+    oppo_root_ang_vel = oppo_root_state[:, 10:13]
+
+    heading_rot = torch_utils.calc_heading_quat_inv(self_root_rot)
+    root_pos_diff = oppo_root_pos - self_root_pos
+    root_pos_diff[..., -1] = oppo_root_pos[..., -1]
+    local_root_pos_diff = torch_utils.quat_rotate(heading_rot, root_pos_diff)
+
+    # calculate distance and speed of the blow to earn points
+    local_tar_rot = torch_utils.quat_mul(heading_rot, oppo_root_rot)
+    local_root_rot_obs = torch_utils.quat_to_tan_norm(local_tar_rot)
+
+    local_oppo_vel = torch_utils.quat_rotate(heading_rot, oppo_root_vel)
+    local_oppo_ang_vel = torch_utils.quat_rotate(heading_rot, oppo_root_ang_vel)
+
+    # calculate the effectiveness of the blow
+    self_hand_pos = self_body_pos[:, hand_ids, :].unsqueeze(-2)
+    oppo_target_pos = oppo_body_pos[:, target_ids, :].unsqueeze(-3).repeat((1, self_hand_pos.shape[1], 1, 1))
+    global_target_hand_pos_diff = (oppo_target_pos - self_hand_pos).view(-1, 3)
+    flat_heading_rot = heading_rot.unsqueeze(-2).\
+        repeat((1, global_target_hand_pos_diff.shape[0] // heading_rot.shape[0], 1))
+    local_target_hand_pos_diff = torch_utils.quat_rotate(flat_heading_rot.view(-1, 4), global_target_hand_pos_diff)
+    local_target_hand_pos_diff = local_target_hand_pos_diff.view(flat_heading_rot.shape[0], -1)
+
+    # calculate the knock-out condition
+    oppo_root_vel_norm = torch.norm(oppo_root_vel, dim=-1, keepdim=True)
+    contact_reward = self_contact_norm * 2.5
+
+    total_reward = (local_target_hand_pos_diff[:, :, -1] * 0.01 + local_oppo_vel[:, :, -1] * 10).sum(dim=1) + contact_reward.sum(dim=1)
+
+    reward_dict = {'distance_reward': local_target_hand_pos_diff[:, :, -1], 'speed_reward': local_oppo_vel[:, :, -1],
+                  'contact_reward': self_contact_norm}
+
+    return total_reward, reward_dict
+```
+This function calculates the effectiveness of the blows by combining the distance and speed of the blow. It also includes a contact reward for punches that make contact with the opponent. The knock-out condition is not explicitly checked here, but can be added as an additional check in the main game loop. The rewards are summed up along the batch dimension to get the final total reward. A dictionary is returned to keep track of each type of reward separately.
+
+Note: This function uses several functions from `torch_utils` which might need to be defined or imported before use. Also, the constants like `2.5` for contact_reward and `10` for speed_reward should be adjusted according to your game's requirements. It is a starting point and needs further optimization based on the actual gameplay dynamics.
+[2024-10-14 21:39:46,720][root][INFO] - Iteration 0: Processing Code Run 0
+[2024-10-14 21:41:19,999][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+Your task is to create an adapted and improved reward function for the Muay Thai variant of the sport based on the given competition rules. The function should motivate efficient sports combat strategies and promote the agent's long-term learning in a competitive environment.
+
+Here are some key factors you can consider:
+
+1. **Powerful Strikes**: Strikes that significantly affect the opponent, like strong kicks, knees, or elbows, score the most points.
+2. **Clear and Forceful Strikes**: Any clear and forceful strikes with punches, kicks, knees, or elbows to the opponent's valid areas score points.
+3. **Unbalancing the Opponent**: Using leg techniques or takedowns to unbalance the opponent and following up with strong attacks can score higher points.
+4. **Knocking Down**: Knocking the opponent down, especially if they need a count, scores more points. A knockdown may result in a two-point deduction.
+5. **Clinch Work**: In clinches, the number and effectiveness of knee strikes are key for scoring.
+6. **Takedowns**: Using allowed takedowns to bring the opponent to the ground can also score points.
+7. **Defense and Counterattacks**: Successfully defending and counterattacking can score points, especially if the counterattack causes significant damage or unbalances the opponent.
+8. **Aggression**: Fighters who display more aggression and take the initiative in offense can also score points.
+9. **Technological Diversity**: Although not the main scoring method, showing a variety of techniques and combinations can also score points, especially when they successfully hit the opponent.
+
+Here's a suggested reward function:
+
+```
+reward = 0.5 * powerful_strikes + 0.3 * clear_and_forceful_strikes + 0.2 * unbalancing_the_opponent + 0.1 * knocking_down
+                    - 0.1 * fouls_committed + 0.05 * defending
+```
+
+Where:
+
+* `powerful_strikes` is the number of strikes that significantly affect the opponent.
+* `clear_and_forceful_strikes` is the total number of clear and forceful strikes with punches, kicks, knees, or elbows to the opponent's valid areas.
+* `unbalancing_the_opponent` represents the effectiveness of takedowns or leg techniques used to unbalance the opponent.
+* `knocking_down` indicates whether a knockdown occurs.
+* `fouls_committed` deducts points for any fouls committed by the agent.
+* `defending` is the number of successful defensive moves, such as blocks or dodges.
+
+This function prioritizes powerful strikes, clear and forceful attacks, and unbalancing the opponent while penalizing fouls. The reward also rewards defense, which is crucial in Muay Thai to counterattack effectively.
+
+Feel free to modify this function based on your analysis of the competition rules. Make sure each factor explains how it affects the strategy learning process and balances the various aspects of the sport.
+
+[2024-10-14 21:41:19,999][root][INFO] - Iteration 0: Code Run final cannot parse function signature

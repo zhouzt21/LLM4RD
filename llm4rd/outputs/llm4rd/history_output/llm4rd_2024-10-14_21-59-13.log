@@ -1,0 +1,121 @@
+[2024-10-14 21:59:13,594][root][INFO] - total iter: 1
+[2024-10-14 22:00:52,246][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-14 22:00:52,246][root][INFO] - Iteration 0: Processing Code Run 0
+[2024-10-14 22:02:36,231][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-14 22:02:36,232][root][INFO] - Iteration 0: Code Run final cannot parse function signature!
+```python
+@torch.jit.script
+def compute_reward(self_root_state, self_body_pos, oppo_root_state, oppo_body_pos, oppo_body_rot,
+                  oppo_dof_pos, oppo_dof_vel, self_contact_norm, oppo_contact_norm,
+                  hand_ids, target_ids):
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
+
+    # Get the current time step
+    time_step = torch.min(self_root_state[:, -1])
+
+    # Check if the match is over or not
+    is_match_over = (time_step >= 10).to(torch.float32)
+
+    # Define reward components
+    distance_reward = 0.0
+    knockout_reward = 0.0
+
+    # Calculate the distance reward component
+    self_hand_pos = self_body_pos[:, hand_ids, :].unsqueeze(-2)
+    oppo_target_pos = oppo_body_pos[:, target_ids, :].unsqueeze(-3).repeat((1, self_hand_pos.shape[1], 1, 1))
+    global_target_hand_pos_diff = (oppo_target_pos - self_hand_pos).view(-1, 3)
+    flat_heading_rot = self_root_state[:, -4:-1].unsqueeze(-2).\
+        repeat((1, global_target_hand_pos_diff.shape[0] // self_root_state.shape[0], 1))
+    local_target_hand_pos_diff = torch_utils.quat_rotate(flat_heading_rot.view(-1, 4), global_target_hand_pos_diff)
+    distance_reward = -torch.norm(local_target_hand_pos_diff, p=2, dim=-1) * (1 - is_match_over)
+
+    # Calculate the knockout reward component
+    oppo_root_vel = oppo_root_state[:, 7:10]
+    local_oppo_vel = torch_utils.quat_rotate(self_root_state[:, -4:-1], oppo_root_vel)
+    knockout_reward = torch.norm(local_oppo_vel, p=2, dim=-1) * is_match_over
+
+    # Normalize the distance reward component by temperature
+    distance_reward_temperature = 10.0
+    normalized_distance_reward = torch.exp(distance_reward / distance_reward_temperature)
+
+    # Normalize the knockout reward component by temperature
+    knockout_reward_temperature = 5.0
+    normalized_knockout_reward = torch.exp(knockout_reward / knockout_reward_temperature)
+
+    # Calculate the total reward and its components
+    total_reward = normalized_distance_reward + normalized_knockout_reward
+
+    # Return the total reward and its components
+    return (total_reward, {'distance_reward': normalized_distance_reward,
+                         'knockout_reward': normalized_knockout_reward})
+```
+[2024-10-14 22:00:52,246][root][INFO] - Iteration 0: Processing Code Run 0
+[2024-10-14 22:02:36,231][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+Let's define an adapted reward function for Muay Thai combat based on the competition rules we've learned.
+
+The goal of a Muay Thai agent should be to win the match by scoring more points than the opponent. Therefore, the reward function should incentivize actions that result in scoring points while penalizing fouls and not taking initiative. 
+
+Here is a proposed reward function for Muay Thai:
+
+**Basic Scoring Reward:**
+
+* Score = Points gained / Duration of the round (3 minutes)
+
+The basic scoring reward encourages agents to score as many points as possible within each 3-minute round.
+
+**Powerful Strike Bonus:**
+
+* Bonus = (Number of powerful strikes - Number of weak strikes) * Weighting factor
+
+This bonus rewards agents for landing more powerful strikes relative to weaker ones, with a higher weighting factor for longer-term strategies that focus on scoring more points. 
+
+**Knockdown and Unbalancing Reward:**
+
+* Knockdown_Reward = 2 * (Number of knockdowns - Number of falls) / Duration of the round
+* Unbalancing_Reward = (Number of takedowns + Number of leg techniques used to unbalance opponent) / Duration of the round
+
+These rewards encourage agents to effectively use takedowns, knee strikes, and kicks to unbalance or knock down their opponents.
+
+**Clinch Work Bonus:**
+
+* Clinch_Work_Bonus = (Number of effective knee strikes in clinches - Number of ineffective strikes) * Weighting factor
+
+This bonus encourages agents to score points by using effective knee strikes during clinches while minimizing weak strikes.
+
+**Defense and Counterattack Reward:**
+
+* Defense_Reward = (Number of defensive actions + Number of successful counterattacks) / Duration of the round
+* Counterattack_Bonus = (Points scored from counterattacks - Points lost due to counterattacks) * Weighting factor
+
+These rewards incentivize agents to defend well, counterattack effectively, and minimize damage taken.
+
+**Aggression Bonus:**
+
+* Aggression_Bonus = Number of initiative-taking actions / Duration of the round
+
+This bonus encourages agents to take the initiative in offense while keeping opponents on the defensive.
+
+**Technological Diversity Reward:**
+
+* Tech_Diversity_Reward = (Number of distinct techniques used) * Weighting factor
+
+This reward promotes using a variety of techniques and combinations, which can lead to successful attacks.
+
+**Foul Penalty:**
+
+* Foul_Penalty = (-2 Points per foul committed)
+
+This penalty discourages agents from committing fouls and encourages them to stay within the rules of Muay Thai combat.
+
+**Impression Points Reward:**
+
+* Impression_Reward = (Number of impression points awarded - Number of penalties for unsportsmanlike conduct) / Duration of the round
+
+This reward acknowledges fighters who display good sportsmanship, aggression, and fighting spirit while discouraging bad behavior that may lead to penalty points.
+
+To balance these factors, we can adjust the weighting factors for each bonus or penalty. For example, increasing the Powerful Strike Bonus weight would make scoring powerful strikes a more crucial strategy for winning matches.
+
+By incorporating these rewards and penalties into an agent's training process, it should be able to learn efficient combat strategies that adapt to different opponents and situations in a competitive environment.
+
+Please let me know if you'd like me to elaborate on any of these factors or suggest additional adjustments. I'm open to further discussion!
+[2024-10-14 22:02:36,232][root][INFO] - Iteration 0: Code Run final cannot parse function signature!

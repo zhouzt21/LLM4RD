@@ -1,0 +1,117 @@
+[2024-10-15 11:05:24,971][root][INFO] - total iter: 1
+[2024-10-15 11:06:30,686][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-15 11:06:30,686][root][INFO] - Iteration 0: Processing Code Run 0
+[2024-10-15 11:08:17,582][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-15 11:05:24,971][root][INFO] - total iter: 1
+[2024-10-15 11:06:30,686][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+@torch.jit.script
+def compute_reward(self_root_pos: torch.Tensor, self_body_rot: torch.Tensor, oppo_root_pos: torch.Tensor,
+                 oppo_body_rot: torch.Tensor, hand_ids: torch.Tensor, target_ids: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    """
+    Reward function for the boxing task
+    """
+    
+    # Calculate distances between fists and opponent's body parts
+    fist_to_target_dist = torch.linalg.norm(self_root_pos[:, hand_ids, :] - oppo_root_pos[:, target_ids, :], dim=-1)
+
+    # Normalize distances by time remaining in match
+    time_left = 10.0  # assume 10 seconds for this example
+    normalized_distance = fist_to_target_dist / time_left
+    
+    # Calculate rewards based on the distances
+    reward_for_effective_blows = -normalized_distance
+    knockout_reward = torch.zeros_like(normalized_distance)
+    
+    for i, (target_id, fist_id) in enumerate(zip(target_ids, hand_ids)):
+        if normalized_distance[i] < 0.1:  # Knockout distance threshold
+            knockout_reward[i] = 5.0
+    
+    reward_dict = {"effective_blows": torch.sum(reward_for_effective_blows),
+                  "knockout": torch.sum(knockout_reward)}
+    
+    return torch.sum(reward_for_effective_blows + knockout_reward), reward_dict
+
+```python
+@torch.jit.script
+def compute_boxing_observation(self_root_state, self_body_pos, oppo_root_state, oppo_body_pos, oppo_body_rot,
+                                  oppo_dof_pos, oppo_dof_vel, self_contact_norm, oppo_contact_norm,
+                                  hand_ids, target_ids):
+    ...
+```|
+[2024-10-15 11:06:30,686][root][INFO] - Iteration 0: Processing Code Run 0
+[2024-10-15 11:08:17,582][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+</|im_end|>
+Here is an example of what your reward function for Muay Thai might look like:
+
+```python
+def muay_thai_reward(state):
+    # Initialize a score that will be returned at the end
+    total_score = 0
+
+    # Check if the match has ended (KO, TKO or decision by points)
+    if state["match_status"] in ["ko", "tko", "decision"]:
+        if state["match_winner"] == state["player"]:
+            return 10000 + total_score
+        else:
+            return -10000 - total_score
+
+    # Check for powerful strikes (kicks, knees and elbows)
+    kick_power = 0
+    knee_power = 0
+    elbow_power = 0
+    for strike in state["strikes"]:
+        if strike["type"] == "kick" and strike["power"] > 0.5:
+            kick_power += strike["damage"]
+        elif strike["type"] == "knee" and strike["power"] > 0.5:
+            knee_power += strike["damage"]
+        elif strike["type"] == "elbow" and strike["power"] > 0.5:
+            elbow_power += strike["damage"]
+
+    # Add power to the total score
+    total_score += kick_power + knee_power + elbow_power
+
+    # Check for clear and forceful strikes (punches, kicks and knees)
+    punch_force = 0
+    kick_force = 0
+    knee_force = 0
+    for strike in state["strikes"]:
+        if strike["type"] == "punch" and strike["force"] > 0.5:
+            punch_force += strike["damage"]
+        elif strike["type"] == "kick" and strike["force"] > 0.5:
+            kick_force += strike["damage"]
+        elif strike["type"] == "knee" and strike["force"] > 0.5:
+            knee_force += strike["damage"]
+
+    # Add force to the total score
+    total_score += punch_force + kick_force + knee_force
+
+    # Check for takedowns (only count successful ones)
+    if state["takedown_attempts"] > 0 and state["successful_takedowns"]:
+        total_score += 1000
+
+    # Check if the opponent is knocked down or unbalanced
+    if state["opponent_knocked_down"] or state["opponent_unbalanced"]:
+        total_score += 500
+
+    # Check for clinch work (knee strikes)
+    if state["clinch_work"]:
+        total_score += 1000
+
+    # Penalize fouls
+    if state["fouls"]:
+        total_score -= 1000
+
+    # Promote aggression and defense (counterattacks)
+    if state["aggressive_attempts"] > 0:
+        total_score += 500
+    if state["successful_counterattacks"]:
+        total_score += 500
+
+    # Penalize holding the ropes or biting
+    if state["holding_rope"] or state["biting"]:
+        total_score -= 1000
+
+    return total_score
+```
+
+This is just an example, and you can modify it as per your requirement. Remember to balance the different aspects of Muay Thai combat so that they encourage efficient strategies and long-term learning in a competitive environment.

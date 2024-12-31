@@ -1,0 +1,4 @@
+task: HumanoidBoxing
+env_name: humanoid_boxing
+description: use boxers' fists to deliver effective blows to their opponents within a set time to earn points, or knock out their opponents to win the match
+max_iterations: 5000

@@ -1,0 +1,100 @@
+[2024-10-15 13:58:52,481][root][INFO] - total iter: 1, total sample: 3, current iter: 0
+[2024-10-15 14:01:05,863][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-15 14:01:05,863][root][INFO] - 0, and the content is:```python
+@torch.jit.script
+def compute_reward(self_body_pos: torch.Tensor, self_root_state: torch.Tensor,
+                 oppo_body_pos: torch.Tensor, oppo_root_state: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    # type: (Tensor, Tensor, Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
+    
+    def distance(x1: torch.Tensor, x2: torch.Tensor):
+        return torch.norm(x1 - x2)
+
+    def impact_reward(self_body_pos, self_root_state, oppo_body_pos, oppo_root_state, contact_norm):
+        heading_rot = torch_utils.calc_heading_quat_inv(self_root_state[:, 3:7])
+        hand_id = (self_body_pos > 0.5).nonzero(as_tuple=False)
+        if len(hand_id) == 0:
+            return 0., {}
+
+        oppo_target_pos = oppo_body_pos[:, int(torch.unique(hand_id)), :].unsqueeze(-2)
+        global_target_hand_pos_diff = (oppo_target_pos - self_body_pos[hand_id, :, :]).view(-1, 3)
+        flat_heading_rot = heading_rot.unsqueeze(-2).repeat((1, global_target_hand_pos_diff.shape[0] // heading_rot.shape[0], 1))
+        local_target_hand_pos_diff = torch_utils.quat_rotate(flat_heading_rot.view(-1, 4), global_target_hand_pos_diff)
+        local_target_hand_pos_diff = local_target_hand_pos_diff.view(flat_heading_rot.shape[0], -1)
+
+        impact_reward = 100. * (contact_norm > 0.5).float() * torch.exp(
+            -distance(local_target_hand_pos_diff, self_body_pos[hand_id, :, :].unsqueeze(-2)).mean(dim=-1))
+
+        return torch.sum(impact_reward), {'Impact': impact_reward}
+
+    def knockout_reward(self_root_state):
+        if torch.norm(torch_utils.quat_to_tan_norm(torch_utils.quat_mul(self_root_state[:, 3:7], oppo_root_state[:, 3:7])) > 2:
+            return torch.tensor([100.]), {'Knockout': torch.tensor([100.])}
+        else:
+            return torch.tensor([0.]), {}
+
+    def time_penalty(oppo_body_pos, oppo_root_state):
+        distance_2d = (torch.norm(oppo_body_pos[:, :, :2] - self_body_pos[:, 3:5], dim=-1) < 0.4).float()
+        if torch.sum(distance_2d) > 10:
+            return -100., {'Time': -100.}
+        else:
+            return torch.tensor([0.]), {}
+
+    def reward(self_root_state, oppo_body_pos):
+        self_contact_norm = torch.norm(torch_utils.quat_to_tan_norm(torch_utils.quat_mul(self_root_state[:, 3:7], oppo_root_state[:, 3:7])) - torch.norm(self_root_state[:, 3:7])
+        oppo_contact_norm = torch.norm(torch_utils.quat_to_tan_norm(torch_utils.quat_mul(oppo_root_state[:, 3:7], self_root_state[:, 3:7])) - torch.norm(oppo_root_state[:, 3:7])
+
+        return impact_reward(self_body_pos, self_root_state, oppo_body_pos, oppo_root_state, torch.where(
+            self_contact_norm > oppo_contact_norm,
+            self_contact_norm - oppo_contact_norm,
+            -torch.abs(self_contact_norm) + torch.abs(oppo_contact_norm)
+        ))
+
+    reward_val, rewards = reward(self_root_state, oppo_body_pos)
+    if torch.sum((self_body_pos[:, 2] < 0.5).float()) > 1:
+        reward_val += knockout_reward(self_root_state)[0]
+    reward_val -= time_penalty(oppo_body_pos, oppo_root_state)[0]
+
+    return reward_val, rewards
+```|
+[2024-10-15 14:01:05,863][root][INFO] - Iteration 0: Processing Code Run 0
+[2024-10-15 14:01:05,864][root][INFO] - Iteration 0: Code Run 0 cannot parse function signature!
+[2024-10-15 14:02:31,167][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-15 14:02:31,168][root][INFO] - The reward function for this Muay Thai game is designed as follows:
+
+def muay_thai_reward_function(self_root_state, self_body_pos, oppo_root_state, oppo_body_pos, oppo_dof_pos,
+                             self_contact_norm, oppo_contact_norm, hand_ids, target_ids):
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor) -> Tensor
+
+    # root info
+    self_root_pos = self_root_state[:, 0:3]
+    self_root_rot = self_root_state[:, 3:7]
+    oppo_root_pos = oppo_root_state[:, 0:3]
+    oppo_root_rot = oppo_root_state[:, 3:7]
+
+    # calculate the distance and rotation difference between the two fighters
+    root_pos_diff = torch.norm(oppo_root_pos - self_root_pos, dim=-1)
+    root_rot_diff = torch.mean(torch.abs(self_root_rot - oppo_root_rot), dim=-1)
+
+    # calculate the power of each strike based on its norm
+    hand_power = self_contact_norm[..., 0]
+    target_power = oppo_contact_norm[..., 0]
+
+    # define the weight for different types of strikes
+    punch_weight = 0.5
+    kick_weight = 2.0
+    knee_weight = 3.0
+    elbow_weight = 1.0
+
+    # calculate the scoring for each type of strike
+    hand_score = torch.where(hand_power > 0, (hand_power * (punch_weight + kick_weight + knee_weight + elbow_weight)), torch.zeros_like(hand_power))
+    target_score = torch.where(target_power > 0, target_power * punch_weight, torch.zeros_like(target_power))
+
+    # consider the factors of knockdown and unbalancing
+    if root_pos_diff < 1.5:
+        hand_score += 2.0
+
+    # calculate the final score by summing all scores
+    total_reward = torch.sum(hand_score) + torch.sum(target_score)
+
+    return total_reward
+

@@ -1,0 +1,111 @@
+[2024-10-15 11:15:29,077][root][INFO] - total iter: 1
+[2024-10-15 11:16:42,950][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-15 11:16:42,950][root][INFO] - ```python
+@torch.jit.script
+def compute_reward(self_root_state, self_body_pos, oppo_root_state, oppo_body_pos, oppo_body_rot,
+                  oppo_dof_pos, oppo_dof_vel, self_contact_norm, oppo_contact_norm, hand_ids, target_ids):
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
+
+    # Initialize reward components
+    blow_reward = 0.0
+    knockout_reward = 0.0
+    time_penalty = 0.0
+
+    self_root_pos = self_root_state[:, 0:3]
+    self_root_rot = self_root_state[:, 3:7]
+
+    heading_rot = torch_utils.calc_heading_quat_inv(self_root_rot)
+    
+    # Reward for blows:
+    hand_pos_diff = oppo_body_pos - self_body_pos
+    hand_pos_diff[..., -1] = oppo_body_pos[..., -1]
+    local_hand_pos_diff = torch_utils.quat_rotate(heading_rot, hand_pos_diff)
+
+    if torch.norm(local_hand_pos_diff[:, 0:2], dim=-1) < 0.5:
+        blow_reward += 10.0
+
+    # Reward for knockouts
+    if torch.all(self_contact_norm > 0):
+        knockout_reward += 100.0
+
+    # Time penalty
+    time_penalty -= (torch.abs(torch.norm(oppo_dof_vel, dim=-1) + torch.norm(oppo_body_pos - oppo_root_state[:, 0:3])) * 0.01)
+
+    # Compute total reward and its components
+    reward = blow_reward + knockout_reward - time_penalty
+    return_reward_components = {
+        "blow_reward": blow_reward,
+        "knockout_reward": knockout_reward,
+        "time_penalty": time_penalty
+    }
+    
+    return torch.tensor(reward), return_reward_components
+```
+
+[2024-10-15 11:16:42,951][root][INFO] - Iteration 0: Processing Code Run 0
+[2024-10-15 11:18:28,161][httpx][INFO] - HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+[2024-10-15 11:18:28,161][root][INFO] - Here is an example code for the reward function adapted to Muay Thai:
+
+```
+import torch
+from torch import tensor
+
+def muay_thai_reward_function(self_state, oppo_state):
+    self_body_pos = self_state[0:3]
+    oppo_body_pos = oppo_state[0:3]
+    
+    # Reward for powerful strikes:
+    strike_dist = torch.norm(oppo_body_pos - self_body_pos)
+    if strike_dist < 1.2 and (torch.abs(self_state[6]) > 50 or torch.abs(self_state[7]) > 200):
+        kick_reward += 5
+    elif strike_dist < 0.8:
+        punch_reward += 10
+
+    # Reward for unbalancing the opponent:
+    if torch.all(oppo_state[3:6] > 1.2):
+        unbalance_reward += 20
+
+    # Time penalty:
+    time_penalty -= (torch.norm(self_state[12:15]) + torch.norm(oppo_state[12:15])) * 0.02
+
+    # Knockdown reward:
+    if torch.any(oppo_state[3:6] < -1):
+        knockdown_reward += 40
+
+    # Clinch work reward:
+    if torch.all(self_state[8:10] > 1.2) and (torch.abs(self_state[9]) > 200 or torch.abs(self_state[11]) > 50):
+        clinch_reward += 20
+
+    # Takedown reward:
+    if torch.any(oppo_state[3:6] < -1.5):
+        takedown_reward += 60
+
+    # Defense and counterattacks reward:
+    defense_reward += (torch.norm(self_state[10:12]) + torch.norm(self_state[13:15])) * 0.01
+
+    # Aggression reward:
+    aggression_reward = torch.abs(torch.mean(self_state[6:11]))
+
+    # Technological diversity reward:
+    technique_reward = torch.unique(self_state[:, -3]).shape[0] / self_state.shape[0]
+
+    # Total reward
+    reward = punch_reward + kick_reward + unbalance_reward + knockdown_reward + clinch_reward + takedown_reward + defense_reward + aggression_reward + technique_reward - time_penalty
+
+    return tensor(reward), {
+        "punch_reward": punch_reward,
+        "kick_reward": kick_reward,
+        "unbalance_reward": unbalance_reward,
+        "knockdown_reward": knockdown_reward,
+        "clinch_reward": clinch_reward,
+        "takedown_reward": takedown_reward,
+        "defense_reward": defense_reward,
+        "aggression_reward": aggression_reward,
+        "technique_reward": technique_reward,
+        "time_penalty": time_penalty
+    }
+```
+
+This reward function aims to encourage the AI agent to use a variety of techniques, such as punches and kicks, to unbalance the opponent. It also rewards fighters for knocking down their opponents, using effective clinch work, taking them down to the ground, defending themselves, showing aggression, and demonstrating diverse fighting styles.
+
+The components are weighted based on the scoring system in Muay Thai to reflect its emphasis on powerful strikes, unbalancing the opponent, knockdowns, clinching, takedowns, defense, aggression, and technological diversity. The time penalty discourages fighters from wasting energy unnecessarily. |

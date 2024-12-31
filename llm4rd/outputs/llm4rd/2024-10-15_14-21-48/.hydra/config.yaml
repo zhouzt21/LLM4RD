@@ -1,0 +1,17 @@
+model: gpt-4-0314
+temperature: 1.0
+suffix: LLAMA
+iteration: 1
+sample: 3
+max_iterations: 3000
+num_eval: 5
+capture_video: false
+use_wandb: false
+wandb_username: ''
+wandb_project: ''
+env:
+  task: HumanoidBoxing
+  env_name: humanoid_boxing
+  description: use boxers' fists to deliver effective blows to their opponents within
+    a set time to earn points, or knock out their opponents to win the match
+  max_iterations: 5000
